@@ -1,0 +1,23 @@
+{
+  "name": "canadian-chemical-engineering-journal-bot",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Wiley chemical engineering highlights PDFs and factual article summaries for Discord",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/service.mjs",
+    "setup": "node scripts/setup-bot.mjs",
+    "invite": "node scripts/invite.mjs",
+    "legacy:watch": "node src/cli.mjs watch",
+    "check": "node src/cli.mjs check",
+    "preview": "node src/cli.mjs preview",
+    "doctor": "node src/cli.mjs doctor",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "discord.js": "14.27.0"
+  }
+}

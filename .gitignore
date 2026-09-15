@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+data/
+pdfs/*
+!pdfs/.gitkeep
+issues.json
+node_modules/
+*.log
+output/
+runtime/
+DEPLOYMENT.md

@@ -1,0 +1,11 @@
+services:
+  journal-bot:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - journal-data:/app/data
+      - ./pdfs:/app/pdfs:ro
+      - ./issues.json:/app/issues.json:ro
+volumes:
+  journal-data:
