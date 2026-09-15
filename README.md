@@ -1,4 +1,10 @@
-# Canadian Chemical Engineering Journal Bot
+# Research Journal Hub
+
+**Current coordinator:** five journal profiles, manually selected channels, one issue per thread, and one article per message. Start with **`/journals help`** in Discord. Run `npm start` locally, or use `INSTALL-HUB-AUTOSTART.ps1` after stopping any older service using the same bot identity.
+
+Read the [Journal Hub guide](docs/JOURNAL-HUB.md) for commands, migration, IEEE link setup and metadata limitations. The Wiley chemical-engineering profile retains its own wording, highlights and editorial credits. The standalone original remains available through `npm run start:legacy`; the historical documentation below describes that original bot.
+
+## Original Canadian Chemical Engineering Journal Bot
 
 **Discord username:** `ccej_bot` (the service preserves your Discord rename)  
 **Application name:** CanadianChemicalEngJournal_bot
@@ -123,3 +129,8 @@ On Windows, install Node.js 22 and Python 3, run `npm ci --omit=dev --ignore-scr
 # Alternate thread version
 
 Run `npm run start:threads` or double-click `START-THREADED-BOT.cmd` for one thread per issue, with the introduction first and one message per article. See [thread version setup and recovery](docs/THREADED-VERSION.md). The alternate service uses its own Discord application and `/journal-threads` commands.
+## Research Journal Hub
+
+The coordinator supports the original Wiley chemical-engineering profile and four distinct Xplore-linked journal profiles. In Discord, start with `/journals help`, then `/journals add` to subscribe a journal in an existing channel. `/journals add-link` opens a form for additional IEEE journal links. New installations create no channels or subscriptions automatically.
+
+Run `npm run start:hub` for the coordinator. See [setup, commands, source handling and migration](docs/JOURNAL-HUB.md). The original Wiley wording, credits and PDF logic are preserved separately from the other publishers. IEEE abstracts require an optional API key when absent from Crossref.

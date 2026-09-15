@@ -8,7 +8,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "start": "node src/service.mjs",
+    "start": "node src/hub-service.mjs",
+    "start:legacy": "node src/service.mjs",
     "setup": "node scripts/setup-bot.mjs",
     "invite": "node scripts/invite.mjs",
     "legacy:watch": "node src/cli.mjs watch",
@@ -17,7 +18,10 @@
     "doctor": "node src/cli.mjs doctor",
     "test": "node --test test/*.test.mjs",
     "start:threads": "node src/thread-service.mjs",
-    "invite:threads": "node scripts/invite-threads.mjs"
+    "invite:threads": "node scripts/invite-threads.mjs",
+    "start:hub": "node src/hub-service.mjs",
+    "migrate:hub": "node scripts/migrate-hub.mjs",
+    "preview:hub": "node scripts/check-hub-sources.mjs"
   },
   "dependencies": {
     "discord.js": "14.27.0"
