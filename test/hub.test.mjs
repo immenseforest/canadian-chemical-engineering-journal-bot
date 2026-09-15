@@ -7,7 +7,7 @@ import {catalog,ieeePublication,resolveJournal} from '../src/hub-catalog.mjs';
 import {journalIssues,openArticle} from '../src/hub-discovery.mjs';
 import {helpText,introPayload,articlePayload,issueTitle} from '../src/hub-format.mjs';
 import {hubCommand} from '../src/hub-command.mjs';
-import {subscribe,scanSubscription,hubGuild,resolveHub,welcomeGuild,controlSubscription} from '../src/hub-core.mjs';
+import {subscribe,scanSubscription,hubGuild,mutateGuild,resolveHub,welcomeGuild,controlSubscription} from '../src/hub-core.mjs';
 import {payloadFor,summaryFor} from '../src/discord.mjs';
 const now=new Date('2026-09-15T12:00:00Z');
 const article=n=>({doi:`10.x/${n}`,title:`Paper ${n}`,url:`https://doi.org/10.x/${n}`,abstract:'A concrete publisher finding with supporting evidence.',authors:['A. Researcher'],page:String(n)});
@@ -71,4 +71,33 @@ test('welcome is once per server and removal preserves journal history',async t=
   await welcomeGuild(cfg,'1',send);await welcomeGuild(cfg,'1',send);assert.equal(sends,1);
   await scanSubscription(cfg,'1','ojcs',opts(fakeTransport(),[issue()]));await controlSubscription(cfg,'1','ojcs','remove');
   assert.equal((await hubGuild(cfg,'1')).subscriptions.ojcs.active,false);assert.ok((await hubGuild(cfg,'1')).subscriptions.ojcs.issues[issue().key]);
+});
+
+test('migrated Wiley message becomes a thread with all highlights once, keeping its old receipt',async t=>{
+  const cfg=await fixture(t);await subscribe(cfg,'1',catalog[0],'10');
+  const i={...issue(),key:'cjce:104:9',journalId:'cjce',journalName:catalog[0].name,volume:'104',number:'9',publisher:'Wiley',highlightedArticles:[1,2,3,4,5,6].map(article)};
+  await mutateGuild(cfg,'1',g=>{g.subscriptions.cjce.issues[i.key]={legacy:true,status:'sent',messageId:'777'};});
+  const transport=fakeTransport();const options={...opts(transport,[i]),attachmentFn:async()=>null};
+  const result=await scanSubscription(cfg,'1','cjce',options);assert.equal(result.threads,1);assert.equal(result.articles,6);
+  const saved=(await hubGuild(cfg,'1')).subscriptions.cjce.issues[i.key];assert.equal(saved.legacyMessageId,'777');assert.ok(saved.threadId);assert.equal(saved.legacy,undefined);
+  await scanSubscription(cfg,'1','cjce',{...options,force:true});assert.equal(transport.calls.filter(c=>c[0]==='thread').length,1);
+});
+test('changing channel preserves receipts per channel and switching back does not duplicate threads',async t=>{
+  const cfg=await fixture(t),transport=fakeTransport(),options=opts(transport,[issue()]);
+  const nonces=[];const send=transport.send;transport.send=(t,p,n)=>{nonces.push(n);return send(t,p,n);};
+  await scanSubscription(cfg,'1','ojcs',options);
+  const original=(await hubGuild(cfg,'1')).subscriptions.ojcs.issues[issue().key].threadId;
+  await subscribe(cfg,'1',catalog[3],'20');await scanSubscription(cfg,'1','ojcs',options);
+  assert.equal(transport.calls.filter(c=>c[0]==='thread').length,2);assert.equal(new Set(nonces).size,6);
+  await subscribe(cfg,'1',catalog[3],'10');await scanSubscription(cfg,'1','ojcs',options);
+  assert.equal(transport.calls.filter(c=>c[0]==='thread').length,2);
+  assert.equal((await hubGuild(cfg,'1')).subscriptions.ojcs.issues[issue().key].threadId,original);
+});
+test('re-adding a subscription with a larger history backfills only the newly included issues',async t=>{
+  const cfg=await fixture(t),transport=fakeTransport(),options=opts(transport,[issue(1),issue(2),issue(3)]);
+  await scanSubscription(cfg,'1','ojcs',options);
+  await subscribe(cfg,'1',catalog[3],'10',{history:2});await scanSubscription(cfg,'1','ojcs',options);
+  assert.equal(transport.calls.filter(c=>c[0]==='thread').length,3);
+  await subscribe(cfg,'1',catalog[3],'10');assert.equal((await hubGuild(cfg,'1')).subscriptions.ojcs.history,2);
+  await scanSubscription(cfg,'1','ojcs',options);assert.equal(transport.calls.filter(c=>c[0]==='thread').length,3);
 });

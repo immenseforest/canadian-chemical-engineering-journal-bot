@@ -8,14 +8,23 @@ export async function mutateGuild(cfg,guildId,fn){
   return withLock(cfg.stateDir,async file=>{const state=await readState(file);const guild=state.destinations[guildId]??={subscriptions:{}};const value=await fn(guild);await saveState(file,state);return value;});
 }
 export async function hubGuild(cfg,guildId){return withLock(cfg.stateDir,async file=>(await readState(file)).destinations[guildId]);}
-export async function subscribe(cfg,guildId,journal,channelId,{history=0,oaOnly=false}={}){
+export async function subscribe(cfg,guildId,journal,channelId,{history,oaOnly}={}){
   if(!/^\d+$/.test(channelId))throw new Error('Choose an existing text channel.');
-  if(!Number.isInteger(history)||history<0||history>9)throw new Error('History must be between 0 and 9 previous issues.');
+  if(history!==undefined&&(!Number.isInteger(history)||history<0||history>9))throw new Error('History must be between 0 and 9 previous issues.');
   return mutateGuild(cfg,guildId,g=>{
     const prior=g.subscriptions[journal.id];
-    if(prior?.active&&prior.channelId===channelId&&prior.oaOnly===oaOnly)return prior;
-    if(prior&&prior.channelId!==channelId)throw new Error('This journal already has a destination. Remove it and use its existing channel, or choose a different journal.');
-    return g.subscriptions[journal.id]={...prior,journal,channelId,history,oaOnly,active:true,paused:false,nextScanAt:null,issues:prior?.issues||{}};
+    const channelHistory={...prior?.channelHistory};
+    let previous=prior;
+    if(prior&&prior.channelId!==channelId){
+      if(Object.values(prior.issues).some(i=>i.operation))throw new Error('Resolve the uncertain delivery in the current channel before changing destination.');
+      const {channelHistory:unused,...saved}=prior;
+      channelHistory[prior.channelId]=saved;
+      previous=channelHistory[channelId];
+    }
+    const requestedHistory=history??previous?.history??0;
+    const requestedOA=oaOnly??previous?.oaOnly??false;
+    const changedSelection=requestedHistory!==previous?.history||requestedOA!==previous?.oaOnly;
+    return g.subscriptions[journal.id]={...previous,journal,channelId,channelHistory,history:requestedHistory,oaOnly:requestedOA,active:true,paused:false,nextScanAt:null,initialized:changedSelection?false:previous?.initialized,issues:previous?.issues||{}};
   });
 }
 export async function controlSubscription(cfg,guildId,id,action){
@@ -37,13 +46,14 @@ export async function scanSubscription(cfg,guildId,id,{transport,discover=discov
       if(!s.initialized){s.ignoredIssues=all.slice(0,Math.max(0,all.length-s.history-1)).map(i=>i.key);s.initialized=true;await checkpoint();}
       for(const fresh of all.filter(i=>!s.ignoredIssues.includes(i.key))){
         let item=s.issues[fresh.key];
-        if(item?.legacy||item?.status==='sent'&&!fresh.continuous){result.unchanged++;continue;}
+        const needsThread=Boolean(item?.legacy&&!item.threadId);
+        if(item?.status==='sent'&&!fresh.continuous&&!needsThread){result.unchanged++;continue;}
         const candidates=fresh.highlightedArticles?.length?fresh.highlightedArticles:fresh.articles;
-        if(!item){
-          const selected=fresh.continuous?candidates.slice(-4):candidates.slice(0,4);
+        if(!item||needsThread){
+          const selected=fresh.highlightedArticles?.length?candidates:fresh.continuous?candidates.slice(-4):candidates.slice(0,4);
           if(!selected.length)continue;
           const articles=await enrich(selected,cfg);
-          item=s.issues[fresh.key]={issue:{...fresh,articles,highlightedArticles:fresh.highlightedArticles?.length?articles:[]},articles,ignoredArticles:fresh.continuous?candidates.filter(a=>!selected.some(b=>b.doi===a.doi)).map(a=>a.doi):[],messages:{},status:'pending'};
+          item=s.issues[fresh.key]={legacyMessageId:needsThread?item.messageId:undefined,issue:{...fresh,articles,highlightedArticles:fresh.highlightedArticles?.length?articles:[]},articles,ignoredArticles:fresh.continuous?candidates.filter(a=>!selected.some(b=>b.doi===a.doi)).map(a=>a.doi):[],messages:{},status:'pending'};
           // Preflight every article before creating any thread.
           articles.forEach((a,i)=>articlePayload(item.issue,a,i));introPayload(item.issue,null);
           await checkpoint();
@@ -66,10 +76,10 @@ export async function scanSubscription(cfg,guildId,id,{transport,discover=discov
         }
         if(!item.threadId){await step({kind:'thread'},()=>transport.create(s.channelId,issueTitle(item.issue)),id=>{item.threadId=id;});result.threads++;}
         await transport.ready(item.threadId,s.channelId);
-        if(!item.introId)await step({kind:'intro'},()=>transport.send(item.threadId,intro,nonce(`${guildId}:${fresh.key}:intro`)),id=>{item.introId=id;});
+        if(!item.introId)await step({kind:'intro'},()=>transport.send(item.threadId,intro,nonce(`${guildId}:${item.threadId}:${fresh.key}:intro`)),id=>{item.introId=id;});
         for(let i=0;i<item.articles.length;i++){
           const a=item.articles[i];if(item.messages[a.doi])continue;
-          await step({kind:'article',doi:a.doi,index:i},()=>transport.send(item.threadId,payloads[i],nonce(`${guildId}:${fresh.key}:${a.doi}`)),id=>{item.messages[a.doi]=id;});result.articles++;
+          await step({kind:'article',doi:a.doi,index:i},()=>transport.send(item.threadId,payloads[i],nonce(`${guildId}:${item.threadId}:${fresh.key}:${a.doi}`)),id=>{item.messages[a.doi]=id;});result.articles++;
         }
         item.status='sent';await checkpoint();
       }

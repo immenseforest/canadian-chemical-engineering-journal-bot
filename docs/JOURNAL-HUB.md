@@ -20,7 +20,7 @@ The chemical-engineering profile is deliberately distinct. Its reviewed summary 
 
 - `/journals help`: introduction and complete command guide.
 - `/journals catalog`: five built-in journal profiles.
-- `/journals add`: choose a journal and channel, optional history and open-access-only filter.
+- `/journals add`: choose a journal and channel, optional history and open-access-only filter. Reusing this command can change the channel or expand the history window. Delivery receipts are retained separately for each channel, so switching back does not duplicate its threads.
 - `/journals add-link`: choose a channel, then paste an IEEE Xplore link in the form. Known links resolve immediately. For unfamiliar journals, an optional ISSN from the journal page works without an IEEE key. Otherwise configure the key once for automatic journal identification. Custom subscriptions filter for confirmed open-access articles.
 - `/journals list`: subscription IDs, channels and state.
 - `/journals status`: next scans, errors and uncertain deliveries.
@@ -36,9 +36,9 @@ Only server managers can change subscriptions or trigger posting. The introducti
 
 Run `npm start` (or `npm run start:hub`). By default it upgrades the configured `DISCORD_BOT_TOKEN` identity; stop the original service before starting it. For Windows login startup, use `INSTALL-HUB-AUTOSTART.ps1` after stopping the older service. Set `HUB_DISCORD_BOT_TOKEN` and `HUB_DISCORD_APPLICATION_ID` in `.env.hub` to use a separate identity instead. Do not start two processes under the same bot identity. Runtime locks prevent the hub and original service from running together with the original token. The standalone original is available with `npm run start:legacy`.
 
-Run `npm run migrate:hub` once when upgrading the existing bot. It copies the selected chemical-engineering channel and sent receipts, leaving original state untouched. Previously delivered messages are not recreated. Other journals remain unsubscribed until explicitly added. State is stored in `data/hub`, or `HUB_BOT_STATE_DIR`. Logs from the service runner go to `data/hub/service.log`.
+Run `npm run migrate:hub` once when upgrading the existing bot. It copies the selected chemical-engineering channel and sent receipts, leaving original state untouched. Old channel messages remain available, but do not count as thread deliveries: the next check creates threads for the selected issue/history window and retains the original message IDs for reference. Other journals remain unsubscribed until explicitly added. State is stored in `data/hub`, or `HUB_BOT_STATE_DIR`. Logs from the service runner go to `data/hub/service.log`.
 
-Checks run every 24 hours and source results are cached for an hour across servers. Confirmed Discord IDs are saved after every operation. Unknown outcomes stop that subscription for review. A source failure does not prevent other subscribed journals from checking. Initial issue highlights select up to four articles. Continuous volume/collection threads initially select four recent articles, then append up to four newly discovered articles per check without replacing shared messages.
+Checks run every 24 hours and source results are cached for an hour across servers. Confirmed Discord IDs are saved after every operation. Unknown outcomes stop that subscription for review. A source failure does not prevent other subscribed journals from checking. Wiley issues include all publisher-highlighted articles; the fallback selects up to four articles. Continuous volume/collection threads initially select four recent articles, then append up to four newly discovered articles per check without replacing shared messages.
 
 ## Metadata and summary limits
 

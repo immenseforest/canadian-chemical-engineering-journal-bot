@@ -89,9 +89,9 @@ client.on(Events.InteractionCreate,guardedListener(async interaction=>{
         await destination(guild,channelId);
         const journal=modal?await resolveJournal(interaction.fields.getTextInputValue('url'),{issn:interaction.fields.getTextInputValue('issn').trim(),apiKey:cfg.ieeeKey}):catalog.find(j=>j.id===interaction.options.getString('journal',true));
         if(!journal)throw new Error('Choose a journal from /journals catalog.');
-        const oaOnly=modal?true:interaction.options.getBoolean('open-access-only')||false;
-        await subscribe(cfg,guild.id,journal,channelId,{history:modal?0:interaction.options.getInteger('history')||0,oaOnly});
-        return `Subscribed **${journal.name}** in <#${channelId}> (${journal.id}). ${oaOnly?'Open-access articles only.':''}\n${await check(guild,journal.id,true)}`;
+        const oaOnly=modal?true:interaction.options.getBoolean('open-access-only')??undefined;
+        const subscription=await subscribe(cfg,guild.id,journal,channelId,{history:modal?0:interaction.options.getInteger('history')??undefined,oaOnly});
+        return `Subscribed **${journal.name}** in <#${channelId}> (${journal.id}). ${subscription.oaOnly?'Open-access articles only.':''}\n${await check(guild,journal.id,true)}`;
       }
       if(['pause','resume','remove'].includes(sub)){const id=interaction.options.getString('subscription',true);await controlSubscription(cfg,guild.id,id,sub);return `${id}: ${sub==='remove'?'subscription removed; threads kept':sub==='pause'?'paused':'resumed'}.`+(sub==='resume'?'\n'+await check(guild,id,true):'');}
       if(sub==='check'){metadata.clear();return check(guild,interaction.options.getString('subscription'),true);}
