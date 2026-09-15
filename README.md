@@ -120,3 +120,6 @@ Bundled software retains its original license files. See `runtime/NODE-LICENSE.t
 ### Build the portable Windows ZIP
 
 On Windows, install Node.js 22 and Python 3, run `npm ci --omit=dev --ignore-scripts`, then `python scripts/package-turnkey.py`. It bundles source, documentation, dependencies and the Node executable found on PATH (or specified by `NODE_BINARY`). The bundled Node license is in `licenses/NODE-LICENSE.txt`. Output goes to `output/`; credentials and delivery data are excluded. Use a Windows Node executable for the Windows package.
+# Alternate thread version
+
+Run `npm run start:threads` or double-click `START-THREADED-BOT.cmd` for one thread per issue, with the introduction first and one message per article. See [thread version setup and recovery](docs/THREADED-VERSION.md). The alternate service uses its own Discord application and `/journal-threads` commands.

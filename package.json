@@ -15,7 +15,9 @@
     "check": "node src/cli.mjs check",
     "preview": "node src/cli.mjs preview",
     "doctor": "node src/cli.mjs doctor",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "start:threads": "node src/thread-service.mjs",
+    "invite:threads": "node scripts/invite-threads.mjs"
   },
   "dependencies": {
     "discord.js": "14.27.0"

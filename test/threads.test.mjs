@@ -1,0 +1,50 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import {threadPayloads,threadTitle,threadSender} from '../src/thread-delivery.mjs';
+import {payloadFor} from '../src/discord.mjs';
+import {configureGuild,scanGuild,guildState,resolveGuildDelivery} from '../src/thread-core.mjs';
+import {threadInstallableConfig,threadInviteUrl} from '../src/thread-config.mjs';
+const issue={key:'cjce:104:9',volume:'104',number:'9',coverMonth:9,coverYear:2026,journalName:'Journal',journalUrl:'https://example.org',issueUrl:'https://example.org/9',publisher:'Wiley',color:123,articles:[1,2].map(n=>({title:`Paper ${n}`,url:`https://doi.org/10.x/${n}`,abstract:'Original publisher abstract.',authors:['A. Author']}))};
+test('alternate bot requires its own identity and invite carries thread permissions',()=>{
+  const cfg=threadInstallableConfig({DISCORD_BOT_TOKEN:'original',DISCORD_APPLICATION_ID:'111',THREAD_DISCORD_BOT_TOKEN:'alternate',THREAD_DISCORD_APPLICATION_ID:'222'},process.cwd());
+  assert.equal(cfg.token,'alternate');assert.equal(cfg.applicationId,'222');assert.match(cfg.stateDir,/threaded$/);
+  const url=new URL(threadInviteUrl(cfg.applicationId));assert.equal(url.searchParams.get('client_id'),'222');
+  const permissions=BigInt(url.searchParams.get('permissions'));assert.ok(permissions&(1n<<35n));assert.ok(permissions&(1n<<38n));
+});
+test('thread layout preserves every original field and introductory wording',()=>{
+  const original=payloadFor(issue),parts=threadPayloads(issue);
+  assert.equal(threadTitle(issue),'Can. J. Chem. Eng. · Vol. 104 · Issue 9 · September 2026');
+  assert.equal(parts.length,3);assert.equal(parts[0].content,original.content);
+  assert.equal(parts[0].embeds[0].description,original.embeds[0].description);
+  assert.equal(parts[0].embeds[0].fields,undefined);
+  assert.deepEqual(parts.slice(1).flatMap(p=>p.embeds[0].fields),original.embeds[0].fields);
+});
+test('sender checkpoints creation and messages, resumes and refreshes same IDs',async()=>{
+  const sent=[],edited=[];let creates=0,fail=true;
+  const thread={id:'100',parentId:'10',name:threadTitle(issue),messages:{edit:async(id,p)=>{edited.push(id);return {id};}},send:async p=>{if(sent.length===1&&fail){fail=false;throw Object.assign(new Error('forbidden'),{status:403});}sent.push(p);return {id:String(200+sent.length)};}};
+  const client={channels:{fetch:async id=>id==='10'?{threads:{create:async()=>{creates++;return thread;}}}:thread}};
+  const send=threadSender(client),progress={};let saves=0;
+  const args={channelId:'10',issue,payload:payloadFor(issue),progress,checkpoint:async()=>{saves++;}};
+  await assert.rejects(send(args),/forbidden/);assert.equal(progress.threadId,'100');assert.deepEqual(progress.completed,[0]);assert.equal(progress.operation,undefined);
+  await send(args);assert.equal(creates,1);assert.equal(sent.length,3);
+  progress.completed=[];await send(args);assert.deepEqual(edited,['201','202','203']);assert.ok(saves>8);
+  await assert.rejects(send({...args,issue:{...issue,articles:[...issue.articles].reverse()}}),/selection or order changed/);
+  assert.equal(edited.length,3);
+});
+test('ambiguous article delivery blocks reposts and resolves within the existing thread',async t=>{
+  const stateDir=await fs.mkdtemp(path.join(os.tmpdir(),'thread-test-'));t.after(()=>fs.rm(stateDir,{recursive:true,force:true}));
+  const cfg={stateDir,timeZone:'UTC'},now=new Date('2026-09-15');
+  await configureGuild(cfg,'g',{channelId:'10'},now);
+  const records=[{volume:'104',issue:'9',type:'journal-article',title:['Paper'],DOI:'10.x/test','published-print':{'date-parts':[[2026,9]]}}];
+  let calls=0;
+  const send=async({progress,checkpoint})=>{calls++;progress.threadId='100';progress.messageIds=['201'];progress.completed=[0];progress.operation={kind:'message',index:1};await checkpoint();throw new Error('timeout');};
+  await assert.rejects(scanGuild(cfg,'g',records,{now,send,log:()=>{}}),/timeout/);
+  await assert.rejects(scanGuild(cfg,'g',records,{now,send}),/Delivery needs review/);assert.equal(calls,1);
+  await resolveGuildDelivery(cfg,'g','cjce:104:9','202');
+  const item=(await guildState(cfg,'g')).issues['10:cjce:104:9'];assert.equal(item.progress.threadId,'100');assert.deepEqual(item.progress.messageIds,['201','202']);assert.equal(item.status,'pending');
+  await scanGuild(cfg,'g',records,{now,send:async()=> '201',log:()=>{}});
+  assert.equal((await scanGuild(cfg,'g',records,{now,force:true,send})).unchanged,1);
+});
