@@ -4,7 +4,11 @@ One Discord coordinator manages five independent journal profiles. There is one 
 
 ## Start in Discord
 
-Use `/journals help` for the complete guide. Use `/journals catalog`, then `/journals add` to choose a journal and an **existing text channel**. Only that explicit command subscribes a new journal. The bot never creates channels automatically. The default sends the latest issue; `history` optionally adds up to nine previous issues. New installations have no subscriptions.
+Use `/journals help` for the complete guide. Use `/journals catalog`, then `/journals add` to choose a journal and an **existing text channel**. Only that explicit command subscribes a new journal. The bot never creates channels automatically. For chemical engineering, `history:0` (the default for new subscriptions) means the current month plus the previous nine calendar months. Values 1–9 mean the current month plus that many preceding months; `history:9` therefore covers the same ten-month window as zero. The calendar follows `JOURNAL_TIME_ZONE`, including year boundaries. Other journals retain their previous-issue count semantics, with zero meaning latest only. New installations have no subscriptions.
+
+The scan reports the total available issue threads as well as newly created and already-present counts. Repeating the command reuses existing threads. Temporary Windows/OneDrive sharing locks are retried during atomic state saves.
+
+[Invite the live coordinator](https://discord.com/oauth2/authorize?client_id=1549241607386046516&scope=bot%20applications.commands&permissions=309237763072&integration_type=0). Self-hosted instances can print their own matching invite using `npm run invite`.
 
 | ID | Journal | Source handling |
 |---|---|---|
@@ -49,3 +53,11 @@ Without that key, IEEE papers whose Crossref metadata omits abstracts retain the
 Thread titles use the journal abbreviation, supplied volume/issue and supplied cover month/year. A missing month is explicitly labelled; continuous publications use annual volume threads, and articles without volume/issue metadata use labelled publication-month collections. Months, issues and results are never inferred from DOI strings.
 
 Sources: [IEEE metadata fields](https://developer.ieee.org/docs/read/Metadata_API_responses), [IEEE API access](https://developer.ieee.org/io-docs), [GJI open-access policy](https://academic.oup.com/gji/pages/gji-open-access), [River Publishers journal catalogue](https://elibrary.riverpublishers.com/).
+
+## IEEE metadata key and request limits
+
+The bot owner can use /journals api-key to open a private form, validate a replacement key, and activate it without restarting. Other server managers cannot change this shared credential. The key is stored only in ignored local data/hub/ieee-key.json; it is never posted or committed. This command changes the IEEE metadata key, not the Discord bot token.
+
+IEEE requests share a persistent 24-hour cache and a per-key rolling limit of 200 calls in 24 hours. Requests are serialized at least 110 ms apart (under 10 per second); failures count too. The budget covers this installation only, so avoid using the same key in other applications. HTTP 401/403 pauses requests for an hour; HTTP 429 pauses them for 24 hours.
+
+Crossref remains the paginated issue-discovery source. Up to 200 recently indexed IEEE records per journal supplement abstracts and access labels; missing selected IEEE abstracts use DOI lookups under the same budget. Wiley discovery and wording remain separate. If IEEE is unavailable, Crossref metadata remains usable; missing abstracts stay explicitly labelled. An IEEE Developer Inactive response requires account activation at developer.ieee.org.

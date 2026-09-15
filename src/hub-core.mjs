@@ -3,6 +3,7 @@ import {withLock,readState,saveState} from './state.mjs';
 import {discoverJournal,enrichArticles} from './hub-discovery.mjs';
 import {introPayload,articlePayload,issueTitle} from './hub-format.mjs';
 import {attachmentFor} from './attachments.mjs';
+import {monthNumber,monthLabel} from './calendar.mjs';
 
 export async function mutateGuild(cfg,guildId,fn){
   return withLock(cfg.stateDir,async file=>{const state=await readState(file);const guild=state.destinations[guildId]??={subscriptions:{}};const value=await fn(guild);await saveState(file,state);return value;});
@@ -43,8 +44,18 @@ export async function scanSubscription(cfg,guildId,id,{transport,discover=discov
       if(Object.values(s.issues).some(i=>i.operation))throw new Error('Uncertain delivery: inspect /journals status, then /journals resolve.');
       const all=await discover(s.journal,{...cfg,oaOnly:s.oaOnly},{now});
       if(!all.length)throw new Error(s.oaOnly?'No dated open-access articles were confirmed. Try again later or disable the open-access-only option for this built-in journal.':'No dated journal articles were found.');
-      if(!s.initialized){s.ignoredIssues=all.slice(0,Math.max(0,all.length-s.history-1)).map(i=>i.key);s.initialized=true;await checkpoint();}
-      for(const fresh of all.filter(i=>!s.ignoredIssues.includes(i.key))){
+      let selectedIssues;
+      if(s.journal.id==='cjce'){
+        const end=monthNumber(now,cfg.timeZone||'America/Toronto'),start=end-(s.history===0?9:s.history);
+        selectedIssues=all.filter(i=>i.coverMonth&&i.coverYear&&i.coverYear*12+i.coverMonth-1>=start&&i.coverYear*12+i.coverMonth-1<=end);
+        result.from=monthLabel(start);result.through=monthLabel(end);
+        s.ignoredIssues=all.filter(i=>!selectedIssues.includes(i)).map(i=>i.key);s.initialized=true;
+      }else{
+        if(!s.initialized){s.ignoredIssues=all.slice(0,Math.max(0,all.length-s.history-1)).map(i=>i.key);s.initialized=true;await checkpoint();}
+        selectedIssues=all.filter(i=>!s.ignoredIssues.includes(i.key));
+      }
+      result.issuesInWindow=selectedIssues.length;
+      for(const fresh of selectedIssues){
         let item=s.issues[fresh.key];
         const needsThread=Boolean(item?.legacy&&!item.threadId);
         if(item?.status==='sent'&&!fresh.continuous&&!needsThread){result.unchanged++;continue;}
@@ -83,6 +94,7 @@ export async function scanSubscription(cfg,guildId,id,{transport,discover=discov
         }
         item.status='sent';await checkpoint();
       }
+      result.threadsAvailable=selectedIssues.filter(i=>s.issues[i.key]?.status==='sent'&&s.issues[i.key]?.threadId).length;
       s.lastError=null;s.lastResult=result;s.lastScanAt=now.toISOString();s.nextScanAt=new Date(now.getTime()+86400000).toISOString();await checkpoint();return result;
     }catch(e){s.lastError=String(e.message).replace(/https:\/\/\S+/g,'[source URL]').slice(0,500);s.nextScanAt=new Date(now.getTime()+3600000).toISOString();await checkpoint();throw e;}
   });

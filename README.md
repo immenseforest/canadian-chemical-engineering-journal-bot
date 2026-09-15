@@ -1,5 +1,9 @@
 # Research Journal Hub
 
+**[Invite the current running bot to your server](https://discord.com/oauth2/authorize?client_id=1549241607386046516&scope=bot%20applications.commands&permissions=309237763072&integration_type=0)**
+
+This installs the live `ccej_bot` coordinator with `/journals` commands and thread permissions. After inviting it, run `/journals help`. For chemical engineering, choose `history:0` for the current month plus the previous nine months. Existing issue threads are reused.
+
 **Current coordinator:** five journal profiles, manually selected channels, one issue per thread, and one article per message. Start with **`/journals help`** in Discord. Run `npm start` locally, or use `INSTALL-HUB-AUTOSTART.ps1` after stopping any older service using the same bot identity.
 
 Read the [Journal Hub guide](docs/JOURNAL-HUB.md) for commands, migration, IEEE link setup and metadata limitations. The Wiley chemical-engineering profile retains its own wording, highlights and editorial credits. The standalone original remains available through `npm run start:legacy`; the historical documentation below describes that original bot.
@@ -17,7 +21,7 @@ The product rules were developed through an iterative user-prompt conversation. 
 
 ## Invite the bot
 
-[Add the running bot to Discord](https://discord.com/oauth2/authorize?client_id=1549241607386046516&scope=bot%20applications.commands&permissions=117776&integration_type=0).
+[Add the running bot to Discord](https://discord.com/oauth2/authorize?client_id=1549241607386046516&scope=bot%20applications.commands&permissions=309237763072&integration_type=0).
 
 You need Discord's **Manage Server** permission to install it. No Administrator permission is requested for the bot.
 

@@ -10,10 +10,10 @@ export function openArticle(record,journal,now=new Date()){
   return (record.license||[]).some(l=>/^https?:\/\/creativecommons\.org\/(licenses|publicdomain)\//i.test(l.URL||'')&&(!l.start?.['date-time']||Date.parse(l.start['date-time'])<=now.getTime()));
 }
 
-export function journalIssues(journal,records,{now=new Date(),oaOnly=false}={}){
+export function journalIssues(journal,records,{now=new Date(),oaOnly=false,timeZone='America/Toronto'}={}){
   if(journal.id==='cjce'){
     const allowed=new Set(records.filter(r=>openArticle(r,journal,now)).map(r=>r.DOI?.toLowerCase()));
-    return calendarIssues(records,{now,timeZone:'UTC'}).map(i=>({...i,abbreviation:journal.abbreviation,continuous:false,articles:oaOnly?i.articles.filter(a=>allowed.has(a.doi.toLowerCase())):i.articles,highlightedArticles:oaOnly?i.highlightedArticles.filter(a=>allowed.has(a.doi.toLowerCase())):i.highlightedArticles})).filter(i=>i.articles.length);
+    return calendarIssues(records,{now,timeZone}).map(i=>({...i,abbreviation:journal.abbreviation,continuous:false,articles:oaOnly?i.articles.filter(a=>allowed.has(a.doi.toLowerCase())):i.articles,highlightedArticles:oaOnly?i.highlightedArticles.filter(a=>allowed.has(a.doi.toLowerCase())):i.highlightedArticles})).filter(i=>i.articles.length);
   }
   const groups=new Map(),seen=new Set();
   for(const r of records){
@@ -38,7 +38,15 @@ export function journalIssues(journal,records,{now=new Date(),oaOnly=false}={}){
 }
 
 export async function discoverJournal(journal,cfg,{now=new Date(),fetchImpl=fetch}={}){
-  return journalIssues(journal,await fetchRecords(journal,{now,fetchImpl,mailto:cfg.mailto}),{now,oaOnly:cfg.oaOnly});
+  const records=await fetchRecords(journal,{now,fetchImpl,mailto:cfg.mailto});
+  if(journal.punumber&&cfg.ieeeKey){
+    try{
+      const metadata=await ieeeQuery({publication_number:journal.punumber,max_records:'200',sort_field:'article_number',sort_order:'desc'},cfg.ieeeKey,fetchImpl);
+      const byDoi=new Map(metadata.filter(r=>r.doi).map(r=>[r.doi.toLowerCase(),r]));
+      for(const r of records){const m=byDoi.get(r.DOI?.toLowerCase());if(m){r.abstract=m.abstract||r.abstract;r.accessType=m.accessType;}}
+    }catch(e){console.error(journal.id+': '+e.message+' Using Crossref metadata.');}
+  }
+  return journalIssues(journal,records,{now,oaOnly:cfg.oaOnly,timeZone:cfg.timeZone});
 }
 
 export async function enrichArticles(articles,cfg,{fetchImpl=fetch}={}){

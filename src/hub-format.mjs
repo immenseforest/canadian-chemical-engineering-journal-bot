@@ -7,9 +7,10 @@ I organise journal updates into one thread per issue, with an introduction first
 **Start here:** use /journals catalog, then /journals add to choose a journal and an existing text channel. I create issue threads only after a server manager subscribes. I never create channels automatically.
 
 **Commands**
+• /journals api-key — bot application owner only: privately replace the shared IEEE key.
 • /journals help — show this guide.
 • /journals catalog — see the five ready-to-use journal profiles.
-• /journals add — subscribe a journal in your chosen channel; optionally include recent issues.
+• /journals add — subscribe in your chosen channel. For chemical engineering, history:0 means current month + past 9 months; 1–9 means past calendar months. Other journals use a count of previous issues.
 • /journals add-link — opens a form for an IEEE Xplore journal link; optional ISSN helps identify unfamiliar journals without an API key.
 • /journals list — show subscriptions, IDs and channels.
 • /journals status — show schedule, errors and any uncertain delivery.
@@ -25,6 +26,12 @@ Server managers control subscriptions. Checks run every 24 hours. Summaries use 
 export function issueTitle(issue){
   const date=issue.coverMonth?new Date(Date.UTC(issue.coverYear,issue.coverMonth-1)).toLocaleDateString('en-CA',{month:'long',year:'numeric',timeZone:'UTC'}):`${issue.coverYear} · month not supplied`;
   return `${issue.abbreviation||issue.journalName} · ${issue.volume?'Vol. '+issue.volume:'Publication collection'}${issue.number?' · Issue '+issue.number:''} · ${date}`.slice(0,100);
+}
+
+export function scanResultText(result){
+  if(result.skipped)return 'Subscription paused or inactive.';
+  if(result.notDue)return 'Next scheduled check is not due yet.';
+  return `${result.threadsAvailable} of ${result.issuesInWindow} issue threads available${result.from?` (${result.from} through ${result.through})`:''}. ${result.threads} newly created; ${result.unchanged} already present. ${result.articles} article messages added.`;
 }
 export function introPayload(issue,attachment){
   if(issue.journalId==='cjce'){

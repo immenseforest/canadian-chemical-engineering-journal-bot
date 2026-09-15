@@ -1,18 +1,20 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {Client,Events,GatewayIntentBits,PermissionFlagsBits as P,ChannelType,MessageFlags,ModalBuilder,TextInputBuilder,TextInputStyle,ActionRowBuilder} from 'discord.js';
+import {loadIeeeKey,replaceIeeeKey} from './ieee-client.mjs';
 import {loadEnv} from './config.mjs';
 import {installableConfig} from './installable-config.mjs';
 import {withLock} from './state.mjs';
 import {guardedListener} from './event-handler.mjs';
 import {catalog,resolveJournal} from './hub-catalog.mjs';
 import {hubCommand} from './hub-command.mjs';
-import {helpText,issueTitle} from './hub-format.mjs';
+import {helpText,issueTitle,scanResultText} from './hub-format.mjs';
 import {hubGuild,mutateGuild,subscribe,controlSubscription,scanSubscription,resolveHub,welcomeGuild} from './hub-core.mjs';
 import {discoverJournal} from './hub-discovery.mjs';
 
 loadEnv();loadEnv('.env.hub');const base=installableConfig();
 const cfg={...base,token:process.env.HUB_DISCORD_BOT_TOKEN||base.token,applicationId:process.env.HUB_DISCORD_APPLICATION_ID||base.applicationId,stateDir:path.resolve(process.env.HUB_BOT_STATE_DIR||'data/hub'),ieeeKey:process.env.IEEE_XPLORE_API_KEY||''};
+cfg.ieeeKey=await loadIeeeKey(cfg.ieeeKey,cfg.stateDir);
 if(!cfg.token)throw new Error('Configure a Discord bot token before starting the journal hub.');
 const safe=e=>{let s=String(e.message||e);for(const secret of [cfg.token,cfg.ieeeKey])if(secret)s=s.split(secret).join('[redacted]');return s.replace(/https:\/\/\S+/g,'[source URL]').slice(0,1500);};
 const client=new Client({intents:[GatewayIntentBits.Guilds],rest:{retries:0}});
@@ -45,7 +47,7 @@ async function check(guild,id,force=false){
   if(id&&!state?.subscriptions[id])throw new Error('Unknown subscription ID; use /journals list.');
   for(const [key,s] of Object.entries(state?.subscriptions||{})){
     if(id&&id!==key||!s.active||s.paused||!force&&s.nextScanAt&&Date.parse(s.nextScanAt)>Date.now())continue;
-    try{await destination(guild,s.channelId);results.push(`${key}: ${JSON.stringify(await scanSubscription(cfg,guild.id,key,{transport,discover,force}))}`);}
+    try{await destination(guild,s.channelId);results.push(`${key}: ${scanResultText(await scanSubscription(cfg,guild.id,key,{transport,discover,force}))}`);}
     catch(e){results.push(`${key}: ${safe(e)}`);console.error(`${guild.id}/${key}: ${safe(e)}`);await mutateGuild(cfg,guild.id,g=>{g.subscriptions[key].lastError=safe(e);g.subscriptions[key].nextScanAt=new Date(Date.now()+3600000).toISOString();});}
   }
   return results.join('\n')||'No journal is due. Use /journals add to subscribe.';
@@ -64,6 +66,15 @@ async function validateReceipt(s,item,id){
 }
 client.on(Events.InteractionCreate,guardedListener(async interaction=>{
   if(!interaction.guild)return;
+  const keyModal=interaction.isModalSubmit()&&interaction.customId==='hub-ieee-key';
+  if(keyModal||(interaction.isChatInputCommand()&&interaction.commandName==='journals'&&interaction.options.getSubcommand()==='api-key')){
+    await client.application.fetch();const owner=client.application.owner;
+    if(interaction.user.id!==(owner?.ownerId||owner?.id)){await interaction.reply({content:'Only the bot application owner can replace this shared IEEE key.',flags:MessageFlags.Ephemeral});return;}
+    if(!keyModal){await interaction.showModal(new ModalBuilder().setCustomId('hub-ieee-key').setTitle('Replace IEEE metadata key').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('key').setLabel('IEEE API key (never posted in the channel)').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(128))));return;}
+    await interaction.deferReply({flags:MessageFlags.Ephemeral});
+    try{await enqueue(async()=>{cfg.ieeeKey=await replaceIeeeKey(interaction.fields.getTextInputValue('key').trim(),cfg.stateDir);metadata.clear();});await interaction.editReply('IEEE key validated and saved. It is active now and survives restarts.');}
+    catch{await interaction.editReply('Key was not changed. Validation or storage failed; check the key and quota, then retry.');}return;
+  }
   const modal=interaction.isModalSubmit()&&interaction.customId.startsWith('hub-add:');
   if(!modal&&(!interaction.isChatInputCommand()||interaction.commandName!=='journals'))return;
   const sub=modal?'add-link':interaction.options.getSubcommand();

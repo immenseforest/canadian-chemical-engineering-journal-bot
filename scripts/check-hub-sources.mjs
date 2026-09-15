@@ -1,10 +1,11 @@
 import fs from 'node:fs/promises';
+import {loadIeeeKey} from '../src/ieee-client.mjs';
 import {loadEnv} from '../src/config.mjs';
 import {installableConfig} from '../src/installable-config.mjs';
 import {catalog} from '../src/hub-catalog.mjs';
 import {discoverJournal} from '../src/hub-discovery.mjs';
 import {introPayload,articlePayload,issueTitle} from '../src/hub-format.mjs';
-loadEnv();const cfg=installableConfig();
+loadEnv();loadEnv('.env.hub');const cfg=installableConfig();cfg.ieeeKey=await loadIeeeKey(process.env.IEEE_XPLORE_API_KEY||'');
 const results=[];
 for(const journal of catalog){
   try{

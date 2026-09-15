@@ -5,7 +5,9 @@ import path from 'node:path';
 import os from 'node:os';
 import {catalog,ieeePublication,resolveJournal} from '../src/hub-catalog.mjs';
 import {journalIssues,openArticle} from '../src/hub-discovery.mjs';
-import {helpText,introPayload,articlePayload,issueTitle} from '../src/hub-format.mjs';
+import {helpText,introPayload,articlePayload,issueTitle,scanResultText} from '../src/hub-format.mjs';
+import {saveState,readState} from '../src/state.mjs';
+import {hubInviteUrl} from '../src/hub-invite.mjs';
 import {hubCommand} from '../src/hub-command.mjs';
 import {subscribe,scanSubscription,hubGuild,mutateGuild,resolveHub,welcomeGuild,controlSubscription} from '../src/hub-core.mjs';
 import {payloadFor,summaryFor} from '../src/discord.mjs';
@@ -100,4 +102,31 @@ test('re-adding a subscription with a larger history backfills only the newly in
   assert.equal(transport.calls.filter(c=>c[0]==='thread').length,3);
   await subscribe(cfg,'1',catalog[3],'10');assert.equal((await hubGuild(cfg,'1')).subscriptions.ojcs.history,2);
   await scanSubscription(cfg,'1','ojcs',options);assert.equal(transport.calls.filter(c=>c[0]==='thread').length,3);
+});
+
+test('CJCE history zero overrides stale latest-only selection with current and nine previous calendar months',async t=>{
+  const cfg=await fixture(t);cfg.timeZone='America/Toronto';await subscribe(cfg,'1',catalog[0],'10',{history:0});
+  const records=Array.from({length:12},(_,n)=>{const d=new Date(Date.UTC(2025,10+n));return {...issue(),key:`cjce:${d.getUTCFullYear()-1922}:${d.getUTCMonth()+1}`,journalId:'cjce',publisher:'Wiley',volume:String(d.getUTCFullYear()-1922),number:String(d.getUTCMonth()+1),coverYear:d.getUTCFullYear(),coverMonth:d.getUTCMonth()+1};});
+  await mutateGuild(cfg,'1',g=>{g.subscriptions.cjce.initialized=true;g.subscriptions.cjce.ignoredIssues=records.map(i=>i.key);});
+  const transport=fakeTransport(),options={...opts(transport,records),now:new Date('2026-10-01T02:00:00Z'),attachmentFn:async()=>null};
+  const first=await scanSubscription(cfg,'1','cjce',options);assert.equal(first.threads,10);assert.equal(first.threadsAvailable,10);assert.equal(first.from,'2025-12');assert.equal(first.through,'2026-09');
+  const again=await scanSubscription(cfg,'1','cjce',{...options,force:true});assert.equal(again.threads,0);assert.equal(again.unchanged,10);assert.match(scanResultText(again),/10 of 10 issue threads available/);
+  await subscribe(cfg,'1',catalog[0],'10',{history:9});assert.equal((await scanSubscription(cfg,'1','cjce',options)).threadsAvailable,10);
+  await subscribe(cfg,'1',catalog[0],'10',{history:1});assert.equal((await scanSubscription(cfg,'1','cjce',options)).issuesInWindow,2);
+});
+test('temporary Windows sharing locks retry atomic state replacement without losing receipts',async t=>{
+  const cfg=await fixture(t),file=path.join(cfg.stateDir,'state.json');const state=await readState(file);state.marker='new';let attempts=0;
+  await saveState(file,state,{rename:async(a,b)=>{if(++attempts<3)throw Object.assign(new Error('locked'),{code:'EPERM'});return fs.rename(a,b);},sleep:async()=>{}});
+  assert.equal((await readState(file)).marker,'new');assert.equal(attempts,3);
+  await assert.rejects(saveState(file,{...state,marker:'not saved'},{rename:async()=>{throw Object.assign(new Error('disk failure'),{code:'EIO'});},sleep:async()=>{}}),/disk failure/);
+  assert.equal((await readState(file)).marker,'new');
+});
+
+test('published hub invite targets the active application with thread permissions and matches the generator',async()=>{
+  const readme=await fs.readFile(new URL('../README.md',import.meta.url),'utf8');
+  const u=new URL(readme.match(/https:\/\/discord.com\/oauth2\/authorize[^)]+/)[0]);const generated=new URL(hubInviteUrl('1549241607386046516'));
+  assert.deepEqual(Object.fromEntries(u.searchParams),Object.fromEntries(generated.searchParams));
+  assert.equal(u.searchParams.get('scope'),'bot applications.commands');
+  assert.equal(u.searchParams.get('permissions'),'309237763072');
+  assert.equal(BigInt(u.searchParams.get('permissions'))&24n,0n);
 });

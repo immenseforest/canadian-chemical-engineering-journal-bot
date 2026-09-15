@@ -2,12 +2,17 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 
-export async function saveState(file, state) {
+export async function saveState(file, state, {rename=fs.rename,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms))}={}) {
   const temp = `${file}.${process.pid}.tmp`;
   const handle = await fs.open(temp, 'w', 0o600);
   try { await handle.writeFile(JSON.stringify(state, null, 2) + '\n'); await handle.sync(); }
   finally { await handle.close(); }
-  await fs.rename(temp, file);
+  // OneDrive/Windows may briefly hold the destination open. Keep atomic replacement;
+  // never remove the existing delivery receipts as a workaround for a sharing lock.
+  for(let attempt=0;;attempt++){
+    try{await rename(temp,file);break;}
+    catch(e){if(!['EPERM','EACCES','EBUSY'].includes(e.code)||attempt===6)throw e;await sleep(50*2**attempt);}
+  }
 }
 
 export async function readState(file) {

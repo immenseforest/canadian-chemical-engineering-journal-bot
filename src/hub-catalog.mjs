@@ -1,3 +1,4 @@
+import {ieeeRequest} from './ieee-client.mjs';
 import {journals} from './journals.mjs';
 
 export const catalog=[
@@ -16,16 +17,7 @@ export function ieeePublication(url){
   return id;
 }
 
-export async function ieeeQuery(query,key,fetchImpl=fetch){
-  const url=new URL('https://ieeexploreapi.ieee.org/api/v1/search/articles');
-  url.search=new URLSearchParams({apikey:key,format:'json',max_records:'1',...query});
-  // Never print a request URL: it contains the IEEE key.
-  const response=await fetchImpl(url,{redirect:'error',signal:AbortSignal.timeout(30000)}).catch(()=>{throw new Error('IEEE metadata connection failed.');});
-  if(!response.ok)throw new Error(`IEEE metadata HTTP ${response.status}; check the API key and quota.`);
-  const data=await response.json();
-  if(!Array.isArray(data.articles))throw new Error('IEEE returned no usable article metadata.');
-  return data.articles;
-}
+export const ieeeQuery=ieeeRequest;
 
 export async function resolveJournal(url,{issn='',apiKey='',fetchImpl=fetch}={}){
   const punumber=ieeePublication(url),known=catalog.find(j=>j.punumber===punumber);
