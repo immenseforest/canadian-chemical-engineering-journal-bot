@@ -11,7 +11,7 @@ Read the [Journal Hub guide](docs/JOURNAL-HUB.md) for commands, migration, IEEE 
 
 ## Why this app exists
 
-Created by **wokewarrior / immenseforest** to make chemical-engineering research easier to follow in a university Discord server. It brings journal highlights into the place students already read, with enough concrete detail to help them decide which original articles to open. Discussion can follow naturally; the bot does not manufacture controversy or ask debate questions.
+Created to make chemical-engineering research easier to follow in a university Discord server. It brings journal highlights into the place students already read, with enough concrete detail to help them decide which original articles to open. Discussion can follow naturally; the bot does not manufacture controversy or ask debate questions.
 
 The product rules were developed through an iterative user-prompt conversation. See [Prompt logic and product intent](docs/PROMPT-LOGIC.md) for the decisions, revisions, and acceptance criteria, and [How it works](docs/ARCHITECTURE.md) for their implementation.
 
